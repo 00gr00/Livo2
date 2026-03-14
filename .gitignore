@@ -1,0 +1,61 @@
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ROS2 / colcon workspaces
+build/
+install/
+log/
+
+# Nested ROS2 workspace outputs in this repo
+Livo2-Ros2/build/
+Livo2-Ros2/install/
+Livo2-Ros2/log/
+ws_livox/build/
+ws_livox/install/
+ws_livox/log/
+
+# CMake / Make outputs
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+CTestConfiguration.ini
+Makefile
+compile_commands.json
+install_manifest.txt
+
+# Generic build artifacts
+*.o
+*.obj
+*.so
+*.a
+*.out
+*.d
+*.gcno
+*.gcda
+
+# Logs / runtime outputs
+*.log
+
+# Archives / SDK packages
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.deb
+
+# Local environment files
+.env
+.env.*
+
