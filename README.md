@@ -194,7 +194,236 @@ FAST-LIVO2 是这个仓库里的核心算法包，包名为 `fast_livo`。从源
 - 后续做 Docker 镜像时，不再被原先那种固定相对库路径卡住
 - 对 x86 / ARM 双架构构建更友好
 - 更适合作为一个完整项目上传到 GitHub
-## 6. 推荐启动方式
+
+如果你是从 GitHub 第一次接手这个仓库，可以把这次改动理解成两条主线：
+
+- 运行主线更清楚了：现在优先使用顶层 [`start_livo2.launch.py`](/home/gr/Livo2/tools/start_livo2.launch.py) 统一拉起 LiDAR、相机、时间戳同步、FAST-LIVO2 和 RViz
+- 依赖主线更清楚了：`vikit_common` / `vikit_ros` 的导出方式已经整理过，`FAST-LIVO2` 不再依赖原来那种写死到源码树相对位置的库路径
+
+这也意味着，当前仓库已经比之前更接近“可容器化”的状态。虽然 `MVS SDK`、`Livox SDK2` 和设备访问这几块仍然需要单独处理，但 `FAST-LIVO2 + rpg_vikit` 这条构建链已经不再是 Docker 化的主要阻塞点。
+
+## 6. Docker 支持
+
+当前仓库已经验证通过两套 Docker 镜像：
+
+- `livo2-core:dev`
+- `livo2-mvs:dev`
+
+对应文件：
+
+- [`docker/Dockerfile`](/home/gr/Livo2/docker/Dockerfile)
+- [`docker/Dockerfile.mvs`](/home/gr/Livo2/docker/Dockerfile.mvs)
+- [`docker/entrypoint.sh`](/home/gr/Livo2/docker/entrypoint.sh)
+- [`docker/compose.yaml`](/home/gr/Livo2/docker/compose.yaml)
+- [`docker/build_images.sh`](/home/gr/Livo2/docker/build_images.sh)
+- [`docker/run_core.sh`](/home/gr/Livo2/docker/run_core.sh)
+- [`docker/run_mvs.sh`](/home/gr/Livo2/docker/run_mvs.sh)
+- [`.dockerignore`](/home/gr/Livo2/.dockerignore)
+
+### 6.1 Core 镜像
+
+`livo2-core:dev` 已验证可以完成以下构建链：
+
+- `Sophus`
+- `Livox-SDK2`
+- `ws_livox`（默认跳过 `mvs_ros2_pkg`）
+- `Livo2-Ros2`
+- `fast_livo`
+- `rviz2`
+
+构建命令：
+
+```bash
+cd /home/gr/Livo2
+docker build -f docker/Dockerfile -t livo2-core:dev .
+```
+
+也可以直接用脚本：
+
+```bash
+cd /home/gr/Livo2
+./docker/build_images.sh
+```
+
+进入容器：
+
+```bash
+docker run --rm -it \
+  --network host \
+  --privileged \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -e ROS_DISTRO=humble \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v /dev:/dev \
+  -w /workspace/Livo2 \
+  livo2-core:dev bash
+```
+
+也可以直接用脚本：
+
+```bash
+cd /home/gr/Livo2
+./docker/run_core.sh
+```
+
+容器内可验证：
+
+```bash
+ros2 pkg executables fast_livo
+rviz2
+```
+
+### 6.2 海康 MVS 扩展镜像
+
+`livo2-mvs:dev` 在 `livo2-core:dev` 基础上额外注入宿主机 `/opt/MVS`，并单独编译 `mvs_ros2_pkg`。
+
+构建命令：
+
+```bash
+cd /home/gr/Livo2
+docker build -f docker/Dockerfile.mvs \
+  --build-context mvs_sdk=/opt/MVS \
+  -t livo2-mvs:dev .
+```
+
+如果已经使用一键脚本构建过 core，可以继续用一键脚本完整构建：
+
+```bash
+cd /home/gr/Livo2
+./docker/build_images.sh
+```
+
+进入容器：
+
+```bash
+docker run --rm -it \
+  --network host \
+  --privileged \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -e ROS_DISTRO=humble \
+  -e LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/lib:/lib:/opt/MVS/lib/64:/opt/MVS/lib/aarch64 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+  -v /dev:/dev \
+  -v /opt/MVS:/opt/MVS:ro \
+  -w /workspace/Livo2 \
+  livo2-mvs:dev bash
+```
+
+也可以直接用脚本：
+
+```bash
+cd /home/gr/Livo2
+./docker/run_mvs.sh
+```
+
+容器内已验证：
+
+```bash
+ros2 pkg executables mvs_ros2_pkg
+ros2 pkg executables fast_livo
+ros2 launch /workspace/Livo2/tools/start_livo2.launch.py --show-args
+```
+
+如果要在容器里使用 RViz，先在宿主机放开 X11 给本地 root：
+
+```bash
+xhost +SI:localuser:root
+```
+
+然后进入容器后可以直接运行：
+
+```bash
+rviz2
+rviz2 -d /workspace/Livo2/Livo2-Ros2/install/fast_livo/share/fast_livo/rviz_cfg/fast_livo2.rviz
+```
+
+或者直接启动带 RViz 的整套 launch：
+
+```bash
+ros2 launch /workspace/Livo2/tools/start_livo2.launch.py
+```
+
+使用结束后，宿主机可以撤销 X11 权限：
+
+```bash
+xhost -SI:localuser:root
+```
+
+### 6.3 Docker 注意事项
+
+- `docker compose` 在部分环境里可能没有可用插件，此时直接使用 `docker run` 更稳。
+- `mvs_ros2_pkg` 依赖宿主机已安装的 `/opt/MVS` SDK，因此海康镜像需要显式挂载 `/opt/MVS`。
+- 海康 SDK 自带的 `libusb` 可能与系统 `PCL` 依赖冲突，因此 `LD_LIBRARY_PATH` 必须优先放系统库路径，再放 `/opt/MVS/lib/64`。
+- 当前 `Dockerfile.mvs` 和 `compose.yaml` 已经按这个顺序固定好库搜索路径。
+- `livo2-core:dev` 更适合做无相机或先验证算法/驱动链路的基础镜像；`livo2-mvs:dev` 用于海康相机链路。
+- 如果容器里运行 `rviz2` 提示显示授权问题，优先检查宿主机是否已经执行 `xhost +SI:localuser:root`。
+
+### 6.4 Docker Compose 用法
+
+如果本机 `docker compose` 插件可用，可以直接使用 [`docker/compose.yaml`](/home/gr/Livo2/docker/compose.yaml)：
+
+构建 core 服务：
+
+```bash
+cd /home/gr/Livo2/docker
+docker compose build livo2-core
+```
+
+构建海康服务：
+
+```bash
+cd /home/gr/Livo2/docker
+docker compose build livo2-mvs
+```
+
+进入 core 容器：
+
+```bash
+cd /home/gr/Livo2/docker
+docker compose run livo2-core bash
+```
+
+进入海康容器：
+
+```bash
+cd /home/gr/Livo2/docker
+docker compose run livo2-mvs bash
+```
+
+如果本机没有可用的 `docker compose` 插件，继续使用上面的 `docker run` 命令即可。
+
+### 6.5 Docker 脚本入口
+
+当前推荐的 Docker 入口脚本有三个：
+
+- [`docker/build_images.sh`](/home/gr/Livo2/docker/build_images.sh)
+- [`docker/run_core.sh`](/home/gr/Livo2/docker/run_core.sh)
+- [`docker/run_mvs.sh`](/home/gr/Livo2/docker/run_mvs.sh)
+
+最常用的方式如下：
+
+```bash
+cd /home/gr/Livo2
+
+# 构建 core + mvs 两套镜像
+./docker/build_images.sh
+
+# 进入 core 容器
+./docker/run_core.sh
+
+# 进入海康 MVS 容器
+./docker/run_mvs.sh
+```
+
+如果希望从零开始重新构建：
+
+```bash
+cd /home/gr/Livo2
+REBUILD_FROM_ZERO=true USE_NO_CACHE=true ./docker/build_images.sh
+```
+## 7. 推荐启动方式
 
 ### 方式 A：使用顶层一键启动 launch
 
@@ -289,7 +518,7 @@ rviz2 -d /home/gr/Livo2/Livo2-Ros2/install/fast_livo/share/fast_livo/rviz_cfg/fa
 
 如果使用 USB 相机链路，还需要额外启动 `usb_cam` 和 `usb_cam_timestamp_compensator.py`。
 
-## 7. 推荐构建顺序
+## 8. 推荐构建顺序
 
 当前仓库更像“集成环境”，建议按下面顺序构建：
 
@@ -312,7 +541,7 @@ colcon build --symlink-install --continue-on-error
 
 如果 `vikit_*`、`Sophus`、`usb_cam` 或 OpenCV/PCL 缺失，构建会失败，需要先补依赖。
 
-## 8. 调试建议
+## 9. 调试建议
 
 常用检查命令：
 
@@ -340,7 +569,7 @@ ros2 topic echo /left_camera/image/camera_info --once
 - `fastlivo.log`
 - `rviz.log`
 
-## 9. 当前仓库状态总结
+## 10. 当前仓库状态总结
 
 从现有文件可以看出，这个仓库已经具备以下能力：
 

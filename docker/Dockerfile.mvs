@@ -1,0 +1,26 @@
+ARG CORE_IMAGE=livo2-core:dev
+FROM ${CORE_IMAGE}
+
+ARG ROS_DISTRO=humble
+ARG TARGETARCH
+
+SHELL ["/bin/bash", "-lc"]
+
+COPY --from=mvs_sdk . /opt/MVS/
+
+RUN case "${TARGETARCH:-amd64}" in \
+      amd64) echo "Using /opt/MVS/lib/64 for amd64" ;; \
+      arm64) echo "Using /opt/MVS/lib/aarch64 for arm64" ;; \
+      *) echo "Unsupported TARGETARCH for MVS image: ${TARGETARCH}" && exit 1 ;; \
+    esac
+
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/lib:/lib:/opt/MVS/lib/64:/opt/MVS/lib/aarch64
+
+WORKDIR /workspace/Livo2/ws_livox
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
+ && source /workspace/Livo2/ws_livox/install/setup.bash \
+ && colcon build \
+    --packages-select mvs_ros2_pkg \
+    --symlink-install
+
+WORKDIR /workspace/Livo2

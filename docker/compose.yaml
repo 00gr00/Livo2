@@ -1,0 +1,48 @@
+services:
+  livo2-core:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        LIVO2_SOURCE_MODE: context
+    image: livo2-core:dev
+    container_name: livo2-core
+    network_mode: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      ROS_DISTRO: humble
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev:/dev
+    working_dir: /workspace/Livo2
+    command: bash
+
+  livo2-mvs:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mvs
+      additional_contexts:
+        mvs_sdk: /opt/MVS
+      args:
+        CORE_IMAGE: livo2-core:dev
+    image: livo2-mvs:dev
+    container_name: livo2-mvs
+    network_mode: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      ROS_DISTRO: humble
+      QT_X11_NO_MITSHM: "1"
+      LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:/usr/local/lib:/usr/lib:/lib:/opt/MVS/lib/64:/opt/MVS/lib/aarch64
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev:/dev
+      - /opt/MVS:/opt/MVS:ro
+    working_dir: /workspace/Livo2
+    command: bash

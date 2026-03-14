@@ -1,0 +1,46 @@
+.git
+.gitmodules
+
+# Build outputs
+build/
+install/
+log/
+Livo2-Ros2/build/
+Livo2-Ros2/install/
+Livo2-Ros2/log/
+ws_livox/build/
+ws_livox/install/
+ws_livox/log/
+Livox-SDK2/build/
+Sophus/build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and generated files
+*.log
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+CTestConfiguration.ini
+Makefile
+install_manifest.txt
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+*.deb
+

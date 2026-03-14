@@ -48,6 +48,7 @@ rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr camera_info_pub;
 sensor_msgs::msg::CameraInfo camera_info_msg_;
 float image_scale = 1.0;
 int trigger_enable = 1;
+bool use_shared_timestamp = false;
 
 // -------------------- Signal --------------------
 void SignalHandler(int signal)
@@ -274,6 +275,29 @@ void applyCameraParams(void *handle, cv::FileStorage &params)
   }
 }
 
+std::string resolveTimeSharePath(cv::FileStorage &params)
+{
+  cv::FileNode configured_path = params["TimeSharePath"];
+  if (!configured_path.empty())
+  {
+    return static_cast<std::string>(configured_path);
+  }
+
+  const char *env_path = std::getenv("LIVO2_TIMESHARE_PATH");
+  if (env_path != nullptr && env_path[0] != '\0')
+  {
+    return std::string(env_path);
+  }
+
+  const char *user_name = getlogin();
+  if (user_name != nullptr && user_name[0] != '\0')
+  {
+    return "/home/" + std::string(user_name) + "/timeshare";
+  }
+
+  return "/tmp/timeshare";
+}
+
 // -------------------- Worker Thread --------------------
 static void *WorkThread(void *pUser)
 {
@@ -337,7 +361,7 @@ static void *WorkThread(void *pUser)
 
     // ------------------- 安全版 timestamp -------------------
     rclcpp::Time stamp;
-    if (trigger_enable && pointt && pointt != MAP_FAILED && pointt->low != 0)
+    if (trigger_enable && use_shared_timestamp && pointt && pointt != MAP_FAILED && pointt->low != 0)
     {
       double t = pointt->low / 1e9;
       stamp = rclcpp::Time(static_cast<int64_t>(t * 1e9));
@@ -401,10 +425,27 @@ int main(int argc, char **argv)
   pub = node->create_publisher<sensor_msgs::msg::Image>(pub_topic, 10);
   camera_info_pub = node->create_publisher<sensor_msgs::msg::CameraInfo>(pub_topic + "/camera_info", 10);
 
-  const char *user_name = getlogin();
-  std::string path_for_time_stamp = "/home/" + std::string(user_name) + "/timeshare";
+  pointt = static_cast<time_stamp *>(MAP_FAILED);
+  const std::string path_for_time_stamp = resolveTimeSharePath(Params);
   int fd = open(path_for_time_stamp.c_str(), O_RDWR);
-  pointt = (time_stamp *)mmap(NULL, sizeof(time_stamp), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  if (fd >= 0)
+  {
+    pointt = (time_stamp *)mmap(NULL, sizeof(time_stamp), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (pointt != MAP_FAILED)
+    {
+      use_shared_timestamp = true;
+      ROS_INFO("Using shared timestamp file: %s", path_for_time_stamp.c_str());
+    }
+    else
+    {
+      ROS_WARN("Failed to mmap shared timestamp file: %s", path_for_time_stamp.c_str());
+    }
+  }
+  else
+  {
+    ROS_WARN("Shared timestamp file not available, falling back to system clock: %s", path_for_time_stamp.c_str());
+  }
 
   SetupSignalHandler();
 
@@ -462,7 +503,10 @@ int main(int argc, char **argv)
   MV_CC_CloseDevice(handle);
   MV_CC_DestroyHandle(handle);
 
-  munmap(pointt, sizeof(time_stamp));
+  if (pointt != MAP_FAILED)
+  {
+    munmap(pointt, sizeof(time_stamp));
+  }
 
   rclcpp::shutdown();
   return 0;
