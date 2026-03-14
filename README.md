@@ -169,19 +169,32 @@ FAST-LIVO2 是这个仓库里的核心算法包，包名为 `fast_livo`。从源
 - `vikit_common`
 - `vikit_ros`
 
-并且链接路径写成了工作空间安装目录下的 `.so`：
-
-```cmake
-${CMAKE_SOURCE_DIR}/../../install/vikit_common/lib/libvikit_common.so
-${CMAKE_SOURCE_DIR}/../../install/vikit_ros/lib/libvikit_ros.so
-```
+当前 `vikit_common` 已经整理为 `ament_cmake` 风格包，`vikit_ros` 也补齐了导出逻辑。`FAST-LIVO2` 不再直接写死源码树中的相对库路径，而是通过 `find_package(vikit_common)`、`find_package(vikit_ros)` 配合构建目录/安装目录解析库文件。
 
 这意味着：
 
-- `Livo2-Ros2` 工作空间里需要先存在并成功安装 `vikit_common` 和 `vikit_ros`
-- 清理安装目录或迁移目录时，要特别留意这两个包是否仍能被找到
+- `Livo2-Ros2` 工作空间里仍然需要先构建 `vikit_common` 和 `vikit_ros`
+- 但 `FAST-LIVO2` 已经不再依赖原先固定的 `../../install/...` 相对路径
+- 对 Docker 化、目录迁移和多架构构建更友好
 
-## 5. 推荐启动方式
+## 5. 最近改动
+
+最近这轮工程整理主要做了下面几件事：
+
+- 新增顶层一键启动入口 [`start_livo2.launch.py`](/home/gr/Livo2/tools/start_livo2.launch.py)，统一拉起 `livox_ros_driver2`、MVS 相机、`livox_retimestamp.py`、`fast_livo` 和 `rviz2`
+- 在一键启动里加入了启动后自检，会自动检查 LiDAR、同步话题、相机图像和 FAST-LIVO 输出
+- 把 `vikit_common` 收拾成了更标准的 `ament_cmake` 包
+- 补齐了 `vikit_ros` 的导出逻辑，修复了会影响安装导出的 include 路径问题
+- 去掉了 `FAST-LIVO2` 对 `vikit_common` / `vikit_ros` 固定相对 `.so` 路径的依赖
+
+这些改动带来的直接好处是：
+
+- 一键启动链路更清晰，排障更直接
+- `FAST-LIVO2` 的依赖关系比以前更稳定
+- 后续做 Docker 镜像时，不再被原先那种固定相对库路径卡住
+- 对 x86 / ARM 双架构构建更友好
+- 更适合作为一个完整项目上传到 GitHub
+## 6. 推荐启动方式
 
 ### 方式 A：使用顶层一键启动 launch
 
@@ -276,7 +289,7 @@ rviz2 -d /home/gr/Livo2/Livo2-Ros2/install/fast_livo/share/fast_livo/rviz_cfg/fa
 
 如果使用 USB 相机链路，还需要额外启动 `usb_cam` 和 `usb_cam_timestamp_compensator.py`。
 
-## 6. 推荐构建顺序
+## 7. 推荐构建顺序
 
 当前仓库更像“集成环境”，建议按下面顺序构建：
 
@@ -299,7 +312,7 @@ colcon build --symlink-install --continue-on-error
 
 如果 `vikit_*`、`Sophus`、`usb_cam` 或 OpenCV/PCL 缺失，构建会失败，需要先补依赖。
 
-## 7. 调试建议
+## 8. 调试建议
 
 常用检查命令：
 
@@ -327,7 +340,7 @@ ros2 topic echo /left_camera/image/camera_info --once
 - `fastlivo.log`
 - `rviz.log`
 
-## 8. 当前仓库状态总结
+## 9. 当前仓库状态总结
 
 从现有文件可以看出，这个仓库已经具备以下能力：
 
